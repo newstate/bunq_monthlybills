@@ -1,0 +1,8 @@
+package-lock.json
+.clasp.json
+node_modules/
+appsscript.json
+package.json
+
+api_responses.json
+Screenshot.png
