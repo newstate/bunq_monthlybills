@@ -168,6 +168,7 @@ function BUNQIMPORT_prod() {
   var nextPageUrl = 'https://api.bunq.com/v1/user/' + getUserDetail('User number') + '/monetary-account/' + getUserDetail('Monetary account number') + '/payment?count=' + count;
 
   while (nextPageUrl) { // Continue fetching pages as long as nextPageUrl is not null
+    // Logger.log("Fetching page: " + nextPageUrl);
     var response = UrlFetchApp.fetch(
       nextPageUrl, {
         'headers': {
@@ -181,6 +182,7 @@ function BUNQIMPORT_prod() {
 
     var data = JSON.parse(response.getContentText());
     var pagePayments = data.Response; // Assuming each page has a Response property containing the payments
+    var paginationInfo = data.Pagination; // Extract Pagination object
 
     // Stop if the last payment date is before January 1, 2023
     var stopFetching = false;  // flag to indicate whether to stop fetching
@@ -203,10 +205,12 @@ function BUNQIMPORT_prod() {
     }
     payments = payments.concat(pagePayments); // Merge page payments with the main payments array
     var firstpayment = new Date(payments[0].Payment.created)
+    // Logger.log("The first payment is: " + firstpayment);
 
     if (stopFetching) {
         break;  // exit the while loop if stopFetching flag is true
     }
+    nextPageUrl = paginationInfo && paginationInfo.newer_url ? 'https://api.bunq.com' + paginationInfo.newer_url : null; // Update nextPageUrl
   }
 
   // some debugging

@@ -166,8 +166,10 @@ function populatePayments() {
   }
   else {
   // get previous month's payments and check whether we paid what we expected to pay
+    Logger.log("Checking previous month's payments...");
     var payments = getPaymentsLastMonth(BUNQIMPORT_prod());
     enableLogging = false;
+    Logger.log("Checking previous month's subscriptions...");
     checked_subscriptions = check_subcriptions();
     var paymentsmap = checked_subscriptions[2];
     var hasnotbeenpaid = checked_subscriptions[1];
@@ -238,8 +240,16 @@ function populatePayments() {
         var row_nr = findRowByValue(sheet, account);
       }
 
-      var cell = sheet.getRange(row_nr, col_nr);
-      var value = cell.getValue();
+      // if the row nr is 1 or higher
+      if (row_nr > 0) {
+        // then write the amount to the corresponding cell
+        var cell = sheet.getRange(row_nr, col_nr);
+        var value = cell.getValue();
+        }
+      else {
+        // use 0 as a placeholder value
+        Logger.log("The account "+account+" is not in the sheet yet!")
+        }
 
       var multiplepayments = paymentsmap[account].length > 1;
 
@@ -356,12 +366,13 @@ function populatePayments() {
   }
   
   // also update the sheet to reflect missing payments from the previous month
-
+  Logger.log("Now checking who has not been paid...")
   let unique_hasnotbeenpaid = new Set(hasnotbeenpaid)
   var missingpayments = [];
 
   for (let i in unique_hasnotbeenpaid) {
     let account = unique_hasnotbeenpaid[i];
+    Logger.log("Finding row by value: "+account)
     cell = sheet.getRange(findRowByValue(sheet, account), months.indexOf(thismonth) + 3 -1);
     expected = parseFloat(cell.getValue());
     if (enableLogging) {Logger.log(account + " has not been paid " + expected);}
