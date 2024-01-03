@@ -1,12 +1,24 @@
 var enableLogging = true;
 var enableWrite = false;
+var enableMail = false;
 var firstTime = false;
+var logMessages = []; // Array to store log messages
 
-var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+var currentDate = new Date();
+var currentYear = currentDate.getFullYear().toString();
+var lastYear = (currentDate.getFullYear() - 1).toString();
 
-var months = list_months();
-var thismonth = new Date().getMonth()
-var previousmonth = thismonth - 1
+var months = [0,1,2,3,4,5,6,7,8,9,10,11];
+var thismonth = currentDate.getMonth()
+var previousmonth = thismonth === 0 ? 11 : thismonth - 1;
+
+// if the month is January, use the sheet of last year to check previous month's payments
+if (thismonth == 0) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(lastYear);
+}
+else {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(currentYear);
+}
 
 function initialize_sheet() {
   // First identifies subscriptions and then writes all the current year's payments to the sheet up to the last complete month
@@ -155,8 +167,8 @@ function check_subcriptions() {
 
 function populatePayments() {
   if (firstTime) {
-  // Fetch all the full months of payments that we have for the year so far and write them to the sheet in the rows belonging to the accounts
-  // The month of January starts at column C
+    // Fetch all the full months of payments that we have for the year so far and write them to the sheet in the rows belonging to the accounts
+    // The month of January starts at column C
     var currentDate = new Date();
     var lastDayLastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
     var payments = BUNQIMPORT_prod().filter(payment => {
@@ -165,11 +177,11 @@ function populatePayments() {
     });
   }
   else {
-  // get previous month's payments and check whether we paid what we expected to pay
-    Logger.log("Checking previous month's payments...");
+    // get previous month's payments and check whether we paid what we expected to pay
+    customLogger("Processing " + getMonthName(previousmonth) + "'s payments...");
     var payments = getPaymentsLastMonth(BUNQIMPORT_prod());
     enableLogging = false;
-    Logger.log("Checking previous month's subscriptions...");
+    customLogger("Checking " + getMonthName(previousmonth) + "'s subscriptions... \n ");
     checked_subscriptions = check_subcriptions();
     var paymentsmap = checked_subscriptions[2];
     var hasnotbeenpaid = checked_subscriptions[1];
@@ -221,45 +233,45 @@ function populatePayments() {
     }
 
     // write the payments for the corresponding month
-    if (months.includes(month)) {
-      var col_nr = months.indexOf(month) + 3;
-      // then find the corresponding row for the account
-      // if it's been received, looks for values below "Received"
-      if (parseFloat(amount) > 0) {
-        var receivedRow = findRowByValue(sheet, "Received");
-        // if there is none return any row above (we might have only received money from a service provider (subcription))
-        if (findRowByValue(sheet, account, receivedRow) > 0) {
-          var row_nr = findRowByValue(sheet, account, receivedRow);
-          // Logger.log(account+" is in row "+row_nr)
-        }
-        else {
-          var row_nr = findRowByValue(sheet, account);
-        }
+
+    var col_nr = months.indexOf(month) + 3;
+    // then find the corresponding row for the account
+    // if it's been received, looks for values below "Received"
+    if (parseFloat(amount) > 0) {
+      var receivedRow = findRowByValue(sheet, "Received");
+      // if there is none return any row above (we might have only received money from a service provider (subcription))
+      if (findRowByValue(sheet, account, receivedRow) > 0) {
+        var row_nr = findRowByValue(sheet, account, receivedRow);
+        // Logger.log(account+" is in row "+row_nr) // debugging
       }
-      else {  
+      else {
         var row_nr = findRowByValue(sheet, account);
       }
+    }
+    else {  
+      var row_nr = findRowByValue(sheet, account);
+    }
 
-      // if the row nr is 1 or higher
-      if (row_nr > 0) {
-        // then write the amount to the corresponding cell
-        var cell = sheet.getRange(row_nr, col_nr);
-        var value = cell.getValue();
-        }
-      else {
-        // use 0 as a placeholder value
-        Logger.log("The account "+account+" is not in the sheet yet!")
-        }
+    // if the row nr is 1 or higher
+    if (row_nr > 0) {
+      // then write the amount to the corresponding cell
+      var cell = sheet.getRange(row_nr, col_nr);
+      var value = cell.getValue();
+    }
+    else {
+      // use 0 as a placeholder value
+      customLogger("The account "+account+" is not in the sheet yet!")
+    }
 
-      var multiplepayments = paymentsmap[account].length > 1;
+    var multiplepayments = paymentsmap[account].length > 1;
 
-      if (value == "") { 
-        if (firstTime) {
+    if (value == "") { 
+      if (firstTime) {
         cell.setNumberFormat("€0.00")
         cell.setValue(parseFloat(amount));
         cell.setNote(description);
-        }
-        else { // unexpected payment
+      }
+      else { // unexpected payment
         if (multiplepayments) {
           if (!paid_pass.includes(account) && parseFloat(amount) < 0) {
             [amount, description] = processPayments(account, paymentsmap, -1, paid_pass);
@@ -277,30 +289,29 @@ function populatePayments() {
         }
         if (enableLogging){
           if (amount > 0) {
-            Logger.log(account + " paid us " + amount);
+            customLogger(account + " paid us " + amount + " for " + description);
           }
           else {
-            Logger.log("We paid " + amount + " to " + account);
+            customLogger("We paid " + amount + " to " + account + " for " + description);
           }
-          Logger.log("We did not expect this payment!");
-          }
+          customLogger("We did not expect this payment!");
+        }
         if (enableWrite) {
           cell.setNumberFormat("€0.00")
           cell.setValue(parseFloat(amount)); 
           cell.setBackground("#f9cb9c"); // set it to a light orange color
           cell.setNote("We did not expect this payment! \nDescriptions:\n" + description);
         }
-
-        }
       }
-      else {
-        if (firstTime) {
+    }
+    else {
+      if (firstTime) {
         var new_value = parseFloat(value) + parseFloat(amount);
         cell.setNumberFormat("€0.00")
         cell.setValue(new_value);
         cell.setNote(cell.getNote() + "\n" + description);
-        }
-        else {
+      }
+      else {
         if (multiplepayments) {
           if (!paid_pass.includes(account) && parseFloat(amount) < 0) {
             [amount, description] = processPayments(account, paymentsmap, -1, paid_pass);
@@ -321,61 +332,71 @@ function populatePayments() {
         let actual = parseFloat(amount);
 
         if (amount > 0) {
-          if (enableLogging){Logger.log(account + " paid us " + amount);}
+          if (enableLogging){
+            customLogger(account + " paid us " + amount + " for " + description);
+          }
           if (expected > 0) {
-            var difference = expected - actual;
+            var difference = (expected - actual).toFixed(2);
           }
           else {
-            var difference = expected + actual;
+            var difference = (expected + actual).toFixed(2);
           }
         }
         else {
-          if (enableLogging){Logger.log("We paid " + amount + " to " + account);}
+          if (enableLogging){
+            customLogger("We paid " + amount + " to " + account + " for " + description);
+          }
           if (expected > 0) {
-            var difference = expected + actual;
+            var difference = (expected + actual).toFixed(2);
           }
           else {
-            var difference = actual - expected;
+            var difference = (actual - expected).toFixed(2);
           }
         }
 
         if (Math.abs(difference) < 0.1) {
-          if (enableLogging){Logger.log("We were correct because the difference is: "+ expected +" versus "+ actual+" = "+difference);}
+          if (enableLogging){
+            customLogger("We were correct because the difference is: "+ expected +" versus "+ actual+" = "+difference + "\n ");
+          }
           if (enableWrite) {
             cell.setBackground("d4f3bd"); // set it to a light green color
             cell.setNote("\nDescriptions:\n" + description);
             cell.setValue(actual)
-            }
           }
+        }
         else {
-          if (enableLogging){Logger.log("We were wrong because the difference is: "+expected+" versus "+actual+" = "+difference);}
+          if (enableLogging){
+            customLogger("We were wrong because the difference is: "+expected+" versus "+actual+" = "+difference + "\n ");
+          }
           if (enableWrite) {
             cell.setBackground("#f3bdbd"); // set it to a light red color
             cell.setNote("The difference is: \n"+difference + "\nDescriptions:\n" + description);
             cell.setValue(actual)
-            }
-          }     
-        }
-      }
-      if ([paid_pass, received_pass].every(pass => pass.includes(account))) { // if both paid and received total amounts for the account were already written once to the sheet
-      // add account to passed array
-      passed.push(account);
-      // Logger.log("The accounts with multiple payments (negative and/or positive) that have passed are: "+passed)
+          }
+        }     
       }
     }
+    if ([paid_pass, received_pass].every(pass => pass.includes(account))) { // if both paid and received total amounts for the account were already written once to the sheet
+      // add account to passed array
+      passed.push(account);
+    }
   }
+  customLogger("The accounts with multiple payments (negative and/or positive) that have passed are: "+passed)
   
   // also update the sheet to reflect missing payments from the previous month
-  Logger.log("Now checking who has not been paid...")
+  customLogger("Now checking who has not been paid...")
   let unique_hasnotbeenpaid = new Set(hasnotbeenpaid)
+  if (unique_hasnotbeenpaid.size == 0) {
+    customLogger("All subscriptions were paid!")
+  }
   var missingpayments = [];
 
   for (let i in unique_hasnotbeenpaid) {
     let account = unique_hasnotbeenpaid[i];
-    Logger.log("Finding row by value: "+account)
+    // customLogger("Finding row by value: "+account)
     cell = sheet.getRange(findRowByValue(sheet, account), months.indexOf(thismonth) + 3 -1);
     expected = parseFloat(cell.getValue());
-    if (enableLogging) {Logger.log(account + " has not been paid " + expected);}
+    if (enableLogging) {customLogger(account + " has not been paid " + expected);}
     missingpayments.push([account, expected]);
     if (enableWrite) {
       cell.setBackground("#cff3ef"); // set it to a light cyan color
@@ -386,13 +407,31 @@ function populatePayments() {
 
   // finally write the account balance and difference to the sheet
   if (enableLogging) {
-    Logger.log("The account balance at the end of previous month is: " + balance);
-    Logger.log("The change in account balance is: " + AccountBalanceDifference)
+    customLogger("The account balance at the end of previous month is: " + balance);
+    customLogger("The change in account balance is: " + AccountBalanceDifference.toFixed(2));
   }
   if (enableWrite) {
-    sheet.getRange(findRowByValue(sheet, "Account Balance"), months.indexOf(thismonth) + 3 -1).setValue(balance);
-    sheet.getRange(findRowByValue(sheet, "Difference"), months.indexOf(thismonth) + 3 -1).setValue(AccountBalanceDifference);
+    sheet.getRange(findRowByValue(sheet, "Account Balance"), months.indexOf(previousmonth) + 3).setValue(balance);
+    sheet.getRange(findRowByValue(sheet, "Difference"), months.indexOf(previousmonth) + 3).setValue(AccountBalanceDifference);
   }
+}
+
+function monthly_mail() {
+enableMail = true;
+populatePayments();
+enableMail = false;
+
+// Combine all log messages into a single string
+var emailBody = logMessages.join("\n");
+
+// Send the email
+GmailApp.sendEmail(
+  getUserDetail("emails").split(",").map(email => email.trim()).filter(email => email != ""), //, milicatrakilovic@gmail.com
+  "Monthly Payments Report", 
+  emailBody
+
+  // next feature: if the payments look good give the user the option to run write_previousmonth() by clicking on a button in the email
+);
 }
 
 function write_previousmonth() {

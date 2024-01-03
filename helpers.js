@@ -6,6 +6,13 @@
 
 // 1. Helper functions for Google Sheets
 
+function customLogger(message) {
+  Logger.log(message); // Log message to the Google Apps Script dashboard
+  if (enableMail) {
+    logMessages.push(message); // Add new message to the array
+  }
+}
+
 function findRowByValue(sheet, value, startingRow) {
     if (startingRow === undefined) {
       startingRow = 0;
@@ -77,18 +84,6 @@ function get_col_nr(ofmonth) {
   return col_nr
 }
 
-function list_months() {   // match the range of column C to N with the months of the year
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var months = [];
-  for (var i=3;i<sheet.getLastColumn();i++) {
-    var value = sheet.getRange(4, i).getValue();
-    if (typeof value == "object") {
-      months.push(value.getMonth());  
-    }
-  }
-  return months;
-}
-
 function getMonthName(month) {
   var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -158,8 +153,8 @@ function createNewSession() {
 
 function BUNQIMPORT_prod() { 
   // get the year from the name of the tab
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var sheetName = sheet.getName();
+  var currentDate = new Date();
+  var currentYear = currentDate.getFullYear().toString();
   var sessionToken = createNewSession();
   var count = 200; // Number of items per page (max)
   var payments = []; // Array to hold all payments
@@ -193,7 +188,10 @@ function BUNQIMPORT_prod() {
         // set flag to true if a payment dated before January 1, year = name of the sheet, is found
         // and if the first and last payment are at least three months apart (in case we start in the first two months of the year)
         // Logger.log(firstpayment.getMonth() - paymentDate.getMonth()) // some debugging
-        if (paymentDate < new Date(sheetName+'-01-01T00:00:00') && (firstpayment.getMonth() - paymentDate.getMonth() >= 3 || firstpayment.getMonth() - paymentDate.getMonth() <= -1)) { // for some reason during the final loop the difference of the months becomes -2 during testing
+        var firstpaymentTotalMonths = firstpayment.getFullYear() * 12 + firstpayment.getMonth(); // calculate total nr of months since a fixed point in time
+        var paymentDateTotalMonths = paymentDate.getFullYear() * 12 + paymentDate.getMonth(); // to be able to calculate the difference
+
+        if (paymentDate < new Date(currentYear+'-01-01T00:00:00') && (firstpaymentTotalMonths - paymentDateTotalMonths >= 3)) { // for some reason during the final loop the difference of the months becomes -2 during testing
             stopFetching = true;  
             cutoffIndex = i - 1;  // update the cutoff index to the index of the previous payment
             // Logger.log("It breaks at" + paymentDate);
@@ -231,6 +229,7 @@ function splitLastMonth() {
     }
 
   var balance = parseFloat(data[0].Payment.balance_after_mutation.value); // this is the account balance after the last payment of the month
+  // Logger.log(payments) // debugging
   return [payments, balance]
 }
 
